@@ -1,0 +1,309 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum EntryType {
+  INCOME
+  EXPENSE
+}
+
+enum ItemStatus {
+  IDEA
+  COMPARING
+  DECIDED
+  PURCHASED
+  PAID
+}
+
+enum ItemPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Opinion {
+  LIKE
+  MAYBE
+  DISLIKE
+}
+
+model User {
+  id                String            @id @default(cuid())
+  name              String?
+  email             String            @unique
+  emailVerified     DateTime?
+  image             String?
+  passwordHash      String?
+  createdAt         DateTime          @default(now())
+  memberships       HouseholdMember[]
+  transactions      Transaction[]     @relation("TransactionAuthor")
+  ownedTransactions Transaction[]     @relation("TransactionOwner")
+  recurringRules    RecurringRule[]   @relation("RecurringAuthor")
+  ownedRules        RecurringRule[]   @relation("RecurringOwner")
+  messages          Message[]
+  reviews           ItemReview[]
+  activities        ActivityLog[]
+  messageReads      MessageRead[]
+  accounts          Account[]
+  sessions          Session[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sessionToken])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model LoginThrottle {
+  email       String    @id
+  attempts    Int       @default(0)
+  windowStart DateTime  @default(now())
+  lockedUntil DateTime?
+}
+
+model Household {
+  id             String            @id @default(cuid())
+  name           String            @default("Notre foyer")
+  currencyCode   String            @default("TND")
+  createdAt      DateTime          @default(now())
+  members        HouseholdMember[]
+  invitation     HouseholdInvite?
+  transactions   Transaction[]
+  items          WeddingItem[]
+  messages       Message[]
+  activities     ActivityLog[]
+  categories     BudgetCategory[]
+  housing        HousingOption[]
+  recurringRules RecurringRule[]   @relation("RecurringHousehold")
+}
+
+model HouseholdMember {
+  id          String    @id @default(cuid())
+  householdId String
+  userId      String    @unique
+  role        String    @default("MEMBER")
+  joinedAt    DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+}
+
+model HouseholdInvite {
+  id          String    @id @default(cuid())
+  householdId String    @unique
+  token       String    @unique
+  email       String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id            String    @id @default(cuid())
+  householdId   String
+  authorId      String
+  ownerId       String?
+  type          EntryType
+  amount        Decimal   @db.Decimal(14, 3)
+  category      String
+  date          DateTime  @default(now())
+  note          String?
+  paymentMethod String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  author        User      @relation("TransactionAuthor", fields: [authorId], references: [id])
+  owner         User?     @relation("TransactionOwner", fields: [ownerId], references: [id])
+
+  @@index([householdId, date])
+  @@index([householdId, category])
+}
+
+model BudgetCategory {
+  id          String    @id @default(cuid())
+  householdId String
+  name        String
+  monthlyCap  Decimal?  @db.Decimal(14, 3)
+  color       String    @default("#8f9b72")
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, name])
+}
+
+model WeddingItem {
+  id              String       @id @default(cuid())
+  householdId     String
+  title           String
+  category        String
+  estimatedAmount Decimal?     @db.Decimal(14, 3)
+  actualAmount    Decimal?     @db.Decimal(14, 3)
+  depositAmount   Decimal?     @db.Decimal(14, 3)
+  url             String?
+  storeName       String?
+  status          ItemStatus   @default(IDEA)
+  priority        ItemPriority @default(MEDIUM)
+  dueDate         DateTime?
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  household       Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  reviews         ItemReview[]
+  messages        Message[]
+  photos          ItemPhoto[]
+
+  @@index([householdId, status])
+}
+
+model ItemReview {
+  id        String      @id @default(cuid())
+  itemId    String
+  userId    String
+  opinion   Opinion
+  score     Int?
+  comment   String?
+  updatedAt DateTime    @updatedAt
+  item      WeddingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  author    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, userId])
+}
+
+model ItemPhoto {
+  id        String      @id @default(cuid())
+  itemId    String
+  fileKey   String      @unique
+  filename  String
+  createdAt DateTime    @default(now())
+  item      WeddingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+model HousingOption {
+  id           String         @id @default(cuid())
+  householdId  String
+  name         String
+  rent         Decimal        @db.Decimal(14, 3)
+  charges      Decimal?       @db.Decimal(14, 3)
+  deposit      Decimal?       @db.Decimal(14, 3)
+  areaM2       Decimal?       @db.Decimal(8, 2)
+  neighborhood String?
+  address      String?
+  notes        String?
+  pros         String?
+  cons         String?
+  visitDate    DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime       @default(now())
+  household    Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  photos       HousingPhoto[]
+
+  @@index([householdId, rent])
+}
+
+model HousingPhoto {
+  id        String        @id @default(cuid())
+  optionId  String
+  fileKey   String        @unique
+  filename  String
+  createdAt DateTime      @default(now())
+  option    HousingOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  householdId String
+  authorId    String
+  itemId      String?
+  body        String
+  imageKey    String?
+  createdAt   DateTime      @default(now())
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  author      User          @relation(fields: [authorId], references: [id])
+  item        WeddingItem?  @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  reads       MessageRead[]
+
+  @@index([householdId, createdAt])
+  @@index([itemId, createdAt])
+}
+
+model MessageRead {
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  householdId String
+  actorId     String
+  action      String
+  entityType  String
+  entityId    String
+  before      Json?
+  after       Json?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  actor       User      @relation(fields: [actorId], references: [id])
+
+  @@index([householdId, createdAt])
+}
+
+model RecurringRule {
+  id          String    @id @default(cuid())
+  householdId String
+  authorId    String
+  ownerId     String?
+  type        EntryType
+  amount      Decimal   @db.Decimal(14, 3)
+  category    String
+  note        String?
+  frequency   String
+  nextDate    DateTime
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  household   Household @relation("RecurringHousehold", fields: [householdId], references: [id], onDelete: Cascade)
+  author      User      @relation("RecurringAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  owner       User?     @relation("RecurringOwner", fields: [ownerId], references: [id])
+
+  @@index([householdId, nextDate])
+}
