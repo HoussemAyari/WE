@@ -6,7 +6,7 @@ Application française mobile-first pour tenir le budget du foyer, préparer le 
 
 ### Modèle de données
 
-- **User / Account / Session** : compte indépendant par partenaire; mots de passe hachés avec bcrypt; session signée Auth.js.
+- **User / AuthAccount / AuthSession / AuthVerification / AuthRateLimit** : Better Auth avec adaptateur Prisma; bcrypt est appelé par Better Auth pour le stockage et la vérification des mots de passe, les sessions sont persistées et renouvelées, et les vérifications, réinitialisations et limites de tentatives sont gérées par le module.
 - **Household / HouseholdMember / HouseholdInvite** : foyer isolé, devise du foyer et invitation à usage unique, expirant après sept jours. Un compte ne peut appartenir qu’à un foyer et un foyer est limité à deux membres.
 - **Transaction / BudgetCategory / RecurringRule** : revenus et dépenses en `Decimal(14,3)`, catégories et plafonds mensuels, récurrences hebdomadaires, mensuelles ou annuelles.
 - **WeddingItem / ItemReview / ItemPhoto** : estimations, coûts réels, acompte, statut, priorité, date limite, avis unique par membre, note sur cinq et photos.
@@ -32,7 +32,7 @@ Prérequis : Node.js 20.9+, npm et un **nouveau** projet Supabase/PostgreSQL dé
 
 1. Dans le tableau de bord Supabase, créez un nouveau projet nommé par exemple `deuxnous-prod`; ne choisissez pas une base existante. Copiez ses URLs de pooler (transaction et session), son Project URL et sa nouvelle clé service-role.
 2. Dans **Storage**, créez le bucket `deuxnous-private` et laissez l’option **Public** désactivée. Ne créez aucune règle publique. L’application utilise la clé de service uniquement côté serveur et vérifie le membre avant chaque upload et téléchargement.
-3. Copiez `.env.example` vers `.env.local` et remplacez les valeurs par celles de ce nouveau projet. Créez des secrets distincts pour `AUTH_SECRET` et `CRON_SECRET` :
+3. Configurez le client Google OAuth et Resend comme décrit plus bas, puis copiez `.env.example` vers `.env.local`. Configurez aussi les valeurs Supabase et créez des secrets distincts pour `AUTH_SECRET` et `CRON_SECRET` :
 
    ```powershell
    node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
@@ -47,21 +47,22 @@ Prérequis : Node.js 20.9+, npm et un **nouveau** projet Supabase/PostgreSQL dé
    npm run dev
    ```
 
-5. Ouvrez <http://localhost:3000/inscription>, créez le premier compte, puis allez dans **Notre foyer → Générer le lien** et partagez l’invitation à votre partenaire. Le lien peut être limité à son adresse e-mail.
+5. Ouvrez <http://localhost:3000/inscription>, créez le premier compte et vérifiez l’adresse depuis l’e-mail reçu. Connectez-vous, puis allez dans **Notre foyer → Générer le lien** et partagez l’invitation à votre partenaire. Le lien peut être limité à son adresse e-mail.
 
-Données de démonstration facultatives, uniquement sur une base de développement jetable :
+Données de démonstration facultatives, uniquement sur une base de développement jetable. Créez et vérifiez d’abord un compte de développement via Better Auth, puis indiquez son adresse :
 
 ```powershell
+$env:DEMO_USER_EMAIL = "votre-adresse-verifiee@exemple.tn"
 npm run db:seed
 ```
 
-Le seed crée `demo@deuxnous.tn` avec le mot de passe temporaire `DemoCouple2026!`. Ne lancez pas ce seed en production; changez toujours ce mot de passe si le compte de démonstration est utilisé.
+Le seed ajoute les données de démonstration au foyer de ce compte et ne crée ni ne hache de mot de passe. Ne lancez pas ce seed en production.
 
 ## Déploiement d’un nouveau projet Vercel
 
 1. Publiez le contenu de `mariage-app/` dans un **nouveau dépôt Git** dédié, puis dans Vercel choisissez **Add New → Project** et importez ce dépôt. Le Root Directory est la racine du dépôt (`./`). Ne reliez pas l’ancien projet Vercel et ne recopiez aucune de ses variables.
 2. Dans Supabase, utilisez le projet neuf créé pour DeuxNous. La connexion poolée `DATABASE_URL` (port 6543) sert aux requêtes de l’application; `DIRECT_URL` utilise le pooler Session (port 5432) et sert aux migrations. Configurez les deux URLs depuis **Connect** dans Supabase plutôt que de reprendre celles d’un autre projet. Si le mot de passe contient des caractères spéciaux, encodez-les dans l’URL.
-3. Depuis **Project → Settings → Environment Variables** dans le nouveau projet Vercel, ajoutez séparément `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` et `CRON_SECRET`. Ne préfixez aucune clé secrète par `NEXT_PUBLIC_`. Limitez les valeurs aux environnements nécessaires.
+3. Depuis **Project → Settings → Environment Variables** dans le nouveau projet Vercel, ajoutez `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` et `CRON_SECRET`. Ne préfixez aucune clé secrète par `NEXT_PUBLIC_`. Limitez les valeurs aux environnements nécessaires.
 4. Remplacez `AUTH_URL` par l’URL HTTPS de ce nouveau déploiement. Générez deux secrets cryptographiques uniques et distincts pour ce déploiement; ne réutilisez pas ceux d’un autre site.
 5. Appliquez la migration de cette base **neuve** depuis un terminal dans le projet :
 
@@ -75,9 +76,27 @@ Le seed crée `demo@deuxnous.tn` avec le mot de passe temporaire `DemoCouple2026
    Les migrations ne modifient que cette base. La commande de build Vercel génère le client Prisma et construit Next.js.
 6. Déployez. Vérifiez le projet neuf et le bucket privé avant de créer les deux comptes. `vercel.json` appelle la tâche quotidienne des récurrences. Les tâches cron Vercel et les quotas des services peuvent dépendre de leur plan; vérifiez les limites de vos comptes avant d’activer l’automatisation.
 
+### Identifiants Google OAuth
+
+1. Dans [Google Cloud Console](https://console.cloud.google.com/), créez ou sélectionnez un projet dédié à DeuxNous. Dans **Google Auth Platform → Branding**, renseignez le nom de l’application, l’e-mail d’assistance et l’adresse de contact développeur.
+2. Dans **Google Auth Platform → Audience**, choisissez **External** si les deux partenaires ont des comptes Google personnels. Tant que l’application est en mode **Testing**, ajoutez les deux adresses à la liste **Test users**. Publiez l’application si elle doit accepter d’autres utilisateurs.
+3. Dans **Google Auth Platform → Data Access**, conservez les portées `openid`, `email` et `profile` seulement.
+4. Dans **Clients → Create client → Web application**, ajoutez les origines JavaScript autorisées `http://localhost:3000` et `https://<votre-domaine-vercel>`.
+5. Ajoutez exactement ces URI de redirection autorisées :
+
+   ```text
+   http://localhost:3000/api/auth/callback/google
+   https://<votre-domaine-vercel>/api/auth/callback/google
+   ```
+
+   Pour un domaine personnalisé, ajoutez également `https://<votre-domaine-personnalise>/api/auth/callback/google`. Copiez l’ID client et le secret client dans `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET`; ne les publiez jamais dans le dépôt. Better Auth gère le flux OAuth, `state` et PKCE.
+6. Dans un compte Resend neuf ou dédié, vérifiez un domaine d’envoi puis créez une clé API. Configurez `RESEND_API_KEY` et `EMAIL_FROM` avec une adresse de ce domaine pour que les liens de vérification et de réinitialisation soient délivrés.
+
 ## Variables d’environnement
 
-Voir [.env.example](./.env.example). Les variables obligatoires sont `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` et, en production, `CRON_SECRET`. `AUTH_URL` est `http://localhost:3000` localement puis l’URL HTTPS du nouveau déploiement.
+Voir [.env.example](./.env.example). Configurez `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` et, en production, `CRON_SECRET`. `.env*` est ignoré par Git, sauf le fichier modèle `.env.example`. `AUTH_URL` vaut `http://localhost:3000` localement puis l’URL HTTPS canonique du nouveau déploiement.
+
+Better Auth exige la vérification de l’adresse avant une connexion par mot de passe. Les liens d’e-mail expirent après une heure. Les cookies sont httpOnly, `SameSite=Lax`, `Secure` en production; les sessions durent 30 jours et sont renouvelées quotidiennement. Le rate limiting des connexions, inscriptions et demandes de réinitialisation est stocké en base. Les comptes Google déjà associés à une adresse vérifiée sont automatiquement liés; l’e-mail local doit être vérifié avant liaison pour prévenir la prise de contrôle d’un compte pré-enregistré.
 
 ## Vérification de livraison
 
@@ -92,6 +111,7 @@ npm run build
 ### Parcours à tester après le déploiement
 
 - [ ] Créer deux comptes distincts; inviter le second depuis le premier; vérifier qu’un foyer ne dépasse jamais deux membres.
+- [ ] Vérifier la validation e-mail, la connexion Google, la liaison Google à un compte e-mail déjà vérifié et la réinitialisation du mot de passe.
 - [ ] Enregistrer un revenu, une dépense à trois décimales et une récurrence; constater la présence dans l’historique puis le CSV.
 - [ ] Créer une catégorie avec plafond mensuel et vérifier l’alerte après dépassement.
 - [ ] Ajouter un meuble avec photo; vérifier que le fichier est dans le bucket privé et que l’URL d’image sans session répond `401`.
@@ -105,7 +125,8 @@ npm run build
 
 - Next.js App Router, React, TypeScript, Tailwind CSS.
 - PostgreSQL Supabase; Prisma ORM et migrations versionnées dans `prisma/migrations/`.
-- Auth.js Credentials, bcrypt; Zod pour valider les entrées API.
+- Better Auth avec adaptateur Prisma, connexion e-mail/mot de passe bcrypt, vérification e-mail, réinitialisation, OAuth Google, CSRF natif, sessions httpOnly et rate limiting persistant.
+- Envoi des e-mails de compte par Resend; Google OAuth gère `state` et PKCE dans Better Auth.
 - Supabase Storage privé pour les photos; la compression est faite dans le navigateur avant l’envoi.
 - `npm run db:generate`, `npm run db:deploy`, `npm run db:seed`, `npm run typecheck`, `npm run lint`, `npm run build`.
 

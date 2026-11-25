@@ -1,28 +1,15 @@
 import { PrismaClient, EntryType, ItemStatus, ItemPriority, Opinion } from "@prisma/client";
-import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = "demo@deuxnous.tn";
-  const passwordHash = await bcrypt.hash("DemoCouple2026!", 12);
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: { passwordHash },
-    create: { email, name: "Amira", passwordHash },
-  });
+  const email = process.env.DEMO_USER_EMAIL?.trim().toLowerCase();
+  if (!email) throw new Error("Définissez DEMO_USER_EMAIL après avoir créé et vérifié le compte de démonstration.");
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user?.emailVerified) throw new Error("Le compte de démonstration doit exister et avoir une adresse vérifiée.");
   const membership = await prisma.householdMember.findUnique({ where: { userId: user.id } });
-  let householdId = membership?.householdId;
-  if (!householdId) {
-    const household = await prisma.household.create({
-      data: {
-        name: "Amira & Sami",
-        currencyCode: "TND",
-        members: { create: { userId: user.id, role: "OWNER" } },
-      },
-    });
-    householdId = household.id;
-  }
+  if (!membership) throw new Error("Le compte de démonstration doit déjà appartenir à un foyer.");
+  const householdId = membership.householdId;
   await prisma.budgetCategory.createMany({
     data: [
       { householdId, name: "Alimentation", monthlyCap: 500, color: "#8f9b72" },

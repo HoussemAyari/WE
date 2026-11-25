@@ -6,8 +6,8 @@ import {
   Send, Settings2, ShieldCheck, ShoppingBag, Sparkles, Trash2, TrendingDown, TrendingUp, Wallet,
 } from "lucide-react";
 import Image from "next/image";
-import { signOut } from "next-auth/react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 
 type View = "home" | "transactions" | "wedding" | "housing" | "chat" | "activity" | "household" | "trash";
 type Entry = {
@@ -134,6 +134,11 @@ export function AppShell({ userId, userName }: { userId: string; userName: strin
   const [currencyCode, setCurrencyCode] = useState("TND");
   const [categoryName, setCategoryName] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  async function logout() {
+    await authClient.signOut();
+    window.location.replace("/connexion");
+  }
 
   useEffect(() => {
     if (!mobileMoreOpen) return;
@@ -440,7 +445,7 @@ export function AppShell({ userId, userName }: { userId: string; userName: strin
             </div>
             <div><div className="couple-name">{household?.name || "Notre foyer"}</div><div className="couple-plan">{coupleMembers.length}/2 membres</div></div>
           </div>
-          <button className="nav-button" style={{ marginTop: 10 }} onClick={() => void signOut({ callbackUrl: "/connexion" })}><ShieldCheck size={15} /> Se déconnecter</button>
+          <button className="nav-button" style={{ marginTop: 10 }} onClick={() => void logout()}><ShieldCheck size={15} /> Se déconnecter</button>
         </div>
       </aside>
 
@@ -507,7 +512,7 @@ export function AppShell({ userId, userName }: { userId: string; userName: strin
         <button className="button-quiet" onClick={() => { show("activity"); setMobileMoreOpen(false); }}><ClipboardList size={15} /> Historique</button>
         <button className="button-quiet" onClick={() => { show("household"); setMobileMoreOpen(false); }}><Settings2 size={15} /> Notre foyer</button>
         <button className="button-quiet" onClick={() => { show("trash"); setMobileMoreOpen(false); }}><ArchiveRestore size={15} /> Corbeille</button>
-        <button className="button-quiet" onClick={() => void signOut({ callbackUrl: "/connexion" })}><ShieldCheck size={15} /> Se déconnecter</button>
+        <button className="button-quiet" onClick={() => void logout()}><ShieldCheck size={15} /> Se déconnecter</button>
       </div>}
       <nav className="mobile-nav" aria-label="Navigation mobile">
         {[navItems[0], navItems[1], navItems[2], navItems[3], navItems[4]].map(({ key, label, icon: Icon }) => (

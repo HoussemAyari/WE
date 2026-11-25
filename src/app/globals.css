@@ -195,6 +195,14 @@ h1, h2, h3, p { margin-top: 0; }
 .login-card > p { margin-bottom: 24px; color: #8f9087; font-size: 12px; }
 .login-form { display: grid; gap: 13px; }
 .login-form .button-primary { width: 100%; min-height: 43px; margin-top: 5px; }
+.auth-forgot { text-align: right; font-size: 11px; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 12px; color: #97988f; font-size: 10px; }
+.auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+.auth-social-button { display: flex; width: 100%; min-height: 43px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: white; color: #4e5049; font-size: 12px; font-weight: 700; }
+.auth-social-button:hover { border-color: #b7bbaa; background: #fffefa; }
+.auth-social-button:disabled { cursor: wait; opacity: .7; }
+.google-mark { font-family: Arial, sans-serif; font-size: 17px; font-weight: 700; color: #4285f4; }
+.auth-resend { display: block; margin: 10px auto 0; border: 0; background: transparent; color: var(--olive-dark); font-size: 11px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .login-switch { margin-top: 18px; color: #8c8d84; font-size: 11px; text-align: center; }
 .text-link { border: 0; background: transparent; padding: 0; color: var(--olive-dark); font-size: inherit; font-weight: 700; }
 .auth-brand { display: flex; align-items: center; gap: 10px; font-family: Georgia, serif; font-size: 19px; }

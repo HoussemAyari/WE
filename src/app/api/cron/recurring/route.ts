@@ -19,9 +19,6 @@ export async function GET(request: Request) {
     orderBy: { nextDate: "asc" },
     take: 100,
   });
-  await prisma.loginThrottle.deleteMany({
-    where: { windowStart: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-  });
   let created = 0;
   for (const rule of rules) {
     await prisma.$transaction(async (tx) => {
