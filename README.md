@@ -30,9 +30,9 @@ Les contrôles d’appartenance au foyer sont faits dans chaque route serveur, a
 
 Prérequis : Node.js 20.9+, npm et un **nouveau** projet Supabase/PostgreSQL dédié à DeuxNous.
 
-1. Dans le tableau de bord Supabase, créez un nouveau projet nommé par exemple `deuxnous-prod`; ne choisissez pas une base existante. Copiez ses URLs de pooler (transaction et session), son Project URL et sa nouvelle clé service-role.
+1. Dans le tableau de bord Supabase, créez un nouveau projet nommé par exemple `deuxnous-prod`; ne choisissez pas une base existante. Vérifiez que le Project Ref `ofmpmilantcvqkonzkns` indiqué dans `.env.example` correspond bien à ce nouveau projet; sinon, remplacez-le. Copiez le Project URL et générez une nouvelle clé serveur après avoir révoqué celle qui a été exposée.
 2. Dans **Storage**, créez le bucket `deuxnous-private` et laissez l’option **Public** désactivée. Ne créez aucune règle publique. L’application utilise la clé de service uniquement côté serveur et vérifie le membre avant chaque upload et téléchargement.
-3. Configurez le client Google OAuth et Resend comme décrit plus bas, puis copiez `.env.example` vers `.env.local`. Configurez aussi les valeurs Supabase et créez des secrets distincts pour `AUTH_SECRET` et `CRON_SECRET` :
+3. Dans Supabase, ouvrez **Connect → Connection string** et sélectionnez **Transaction pooler** pour `DATABASE_URL`; choisissez **Session pooler** pour `DIRECT_URL` si la connexion directe indiquée dans `.env.example` n’est pas accessible. Le mot de passe PostgreSQL est celui défini à la création du projet; si vous l’avez oublié, réinitialisez-le sous **Project Settings → Database**. Encodez les caractères spéciaux du mot de passe dans les URI. Configurez le client Google OAuth et Resend comme décrit plus bas, puis copiez `.env.example` vers `.env.local`. Configurez aussi les valeurs Supabase et créez des secrets distincts pour `AUTH_SECRET` et `CRON_SECRET` :
 
    ```powershell
    node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
@@ -61,7 +61,7 @@ Le seed ajoute les données de démonstration au foyer de ce compte et ne crée 
 ## Déploiement d’un nouveau projet Vercel
 
 1. Publiez le contenu de `mariage-app/` dans un **nouveau dépôt Git** dédié, puis dans Vercel choisissez **Add New → Project** et importez ce dépôt. Le Root Directory est la racine du dépôt (`./`). Ne reliez pas l’ancien projet Vercel et ne recopiez aucune de ses variables.
-2. Dans Supabase, utilisez le projet neuf créé pour DeuxNous. La connexion poolée `DATABASE_URL` (port 6543) sert aux requêtes de l’application; `DIRECT_URL` utilise le pooler Session (port 5432) et sert aux migrations. Configurez les deux URLs depuis **Connect** dans Supabase plutôt que de reprendre celles d’un autre projet. Si le mot de passe contient des caractères spéciaux, encodez-les dans l’URL.
+2. Dans Supabase, utilisez le projet neuf créé pour DeuxNous. La connexion poolée `DATABASE_URL` (port 6543) sert aux requêtes de l’application; `DIRECT_URL` utilise de préférence le pooler Session (port 5432) pour les migrations. Configurez les URI depuis **Connect → Connection string** plutôt que de reprendre celles d’un autre projet. Si le mot de passe contient des caractères spéciaux, encodez-les dans l’URL.
 3. Depuis **Project → Settings → Environment Variables** dans le nouveau projet Vercel, ajoutez `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` et `CRON_SECRET`. Ne préfixez aucune clé secrète par `NEXT_PUBLIC_`. Limitez les valeurs aux environnements nécessaires.
 4. Remplacez `AUTH_URL` par l’URL HTTPS de ce nouveau déploiement. Générez deux secrets cryptographiques uniques et distincts pour ce déploiement; ne réutilisez pas ceux d’un autre site.
 5. Appliquez la migration de cette base **neuve** depuis un terminal dans le projet :
